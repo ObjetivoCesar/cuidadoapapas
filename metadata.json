@@ -1,0 +1,7 @@
+{
+  "name": "CuidaPadres - Registro de Signos Vitales",
+  "description": "Una aplicación móvil diseñada para que enfermeras registren signos vitales y familiares monitoreen la salud mediante un dashboard estadístico.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
