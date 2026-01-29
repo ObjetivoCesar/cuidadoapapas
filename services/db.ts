@@ -3,9 +3,9 @@ import { VitalRecord, MedicineRecord, Patient } from '../types';
 const VITALS_KEY = 'cuidapadres_vitals_v3';
 const MEDICINE_KEY = 'cuidapadres_medicine_v3';
 
-// TODO: Remplazar estas constantes con las credenciales reales que me pases
-const SUPABASE_URL = 'https://fxjmgpoonjjduwkwoian.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4am1ncG9vbmpqZHV3a3dvaWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4NDYwMzEsImV4cCI6MjA4MTQyMjAzMX0.d-hQ7kFtFqLdU3VehfF3qdjNTC-3RQ48j22rCED4CUk';
+// Credenciales desde variables de entorno de Vite
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fxjmgpoonjjduwkwoian.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4am1ncG9vbmpqZHV3a3dvaWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4NDYwMzEsImV4cCI6MjA4MTQyMjAzMX0.d-hQ7kFtFqLdU3VehfF3qdjNTC-3RQ48j22rCED4CUk';
 
 export const dbService = {
   syncRemote: async (table: string, data: any) => {
@@ -55,10 +55,11 @@ export const dbService = {
     }
   },
 
-  fetchRemote: async (table: string): Promise<any[]> => {
+  fetchRemote: async (table: string, sinceDays: number = 30): Promise<any[]> => {
     if (!SUPABASE_URL || !SUPABASE_KEY) return [];
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
+      const cutoff = Date.now() - (sinceDays * 24 * 60 * 60 * 1000);
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&timestamp=gte.${cutoff}`, {
         method: 'GET',
         headers: {
           'apikey': SUPABASE_KEY,
@@ -69,7 +70,6 @@ export const dbService = {
       if (!response.ok) throw new Error(`Fetch error: ${response.statusText}`);
       const data = await response.json();
 
-      // Convert snake_case back to camelCase
       return data.map((item: any) => {
         if (table === 'vital_records') {
           return {
@@ -102,40 +102,51 @@ export const dbService = {
     }
   },
 
-  syncFromRemote: async () => {
-    console.log('🔄 Iniciando sincronización completa...');
+  syncFromRemote: async (onProgress?: (msg: string) => void) => {
+    onProgress?.('🔄 Sincronizando...');
+
+    // 1. Subir pendientes locales
+    const localV = await dbService.getAllVitals();
+    const localM = await dbService.getAllMedicines();
+
+    const pendingV = localV.filter(r => !r.synced);
+    const pendingM = localM.filter(r => !r.synced);
+
+    for (const v of pendingV) {
+      if (await dbService.syncRemote('vital_records', v)) {
+        const current = await dbService.getAllVitals();
+        localStorage.setItem(VITALS_KEY, JSON.stringify(current.map(r => r.id === v.id ? { ...r, synced: true } : r)));
+      }
+    }
+
+    for (const m of pendingM) {
+      if (await dbService.syncRemote('medicine_records', m)) {
+        const current = await dbService.getAllMedicines();
+        localStorage.setItem(MEDICINE_KEY, JSON.stringify(current.map(r => r.id === m.id ? { ...r, synced: true } : r)));
+      }
+    }
+
+    // 2. Descargar últimos 30 días
     const remoteVitals = await dbService.fetchRemote('vital_records');
     const remoteMedicines = await dbService.fetchRemote('medicine_records');
 
     if (remoteVitals.length > 0) {
-      // Combinar con locales, evitando duplicados por ID
-      const localVitals = await dbService.getAllVitals();
-      const combinedVitals = [...remoteVitals];
-
-      localVitals.forEach(local => {
-        if (!combinedVitals.find(remote => remote.id === local.id)) {
-          combinedVitals.push(local);
-        }
-      });
-
-      combinedVitals.sort((a, b) => b.timestamp - a.timestamp);
-      localStorage.setItem(VITALS_KEY, JSON.stringify(combinedVitals));
+      const currentVitals = await dbService.getAllVitals();
+      const combined = [...remoteVitals];
+      currentVitals.forEach(l => { if (!combined.find(r => r.id === l.id)) combined.push(l); });
+      combined.sort((a, b) => b.timestamp - a.timestamp);
+      localStorage.setItem(VITALS_KEY, JSON.stringify(combined));
     }
 
     if (remoteMedicines.length > 0) {
-      const localMedicines = await dbService.getAllMedicines();
-      const combinedMedicines = [...remoteMedicines];
-
-      localMedicines.forEach(local => {
-        if (!combinedMedicines.find(remote => remote.id === local.id)) {
-          combinedMedicines.push(local);
-        }
-      });
-
-      combinedMedicines.sort((a, b) => b.timestamp - a.timestamp);
-      localStorage.setItem(MEDICINE_KEY, JSON.stringify(combinedMedicines));
+      const currentMedicines = await dbService.getAllMedicines();
+      const combined = [...remoteMedicines];
+      currentMedicines.forEach(l => { if (!combined.find(r => r.id === l.id)) combined.push(l); });
+      combined.sort((a, b) => b.timestamp - a.timestamp);
+      localStorage.setItem(MEDICINE_KEY, JSON.stringify(combined));
     }
-    console.log('✅ Sincronización terminada.');
+
+    onProgress?.('✅ Al día');
   },
 
   saveVitalRecord: async (record: Omit<VitalRecord, 'id' | 'timestamp'>): Promise<VitalRecord> => {
