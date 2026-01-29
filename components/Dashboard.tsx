@@ -4,20 +4,35 @@ import { VitalRecord, Patient } from '../types';
 
 interface Props { records: VitalRecord[]; patient: Patient; }
 
-type TimeRange = '24h' | '7d' | '30d';
+type TimeRange = 'day' | '7d' | '30d';
 type DayFilter = 'all' | 'night';
 
 const Dashboard: React.FC<Props> = ({ records, patient }) => {
-  const [timeRange, setTimeRange] = useState<TimeRange>('7d');
+  const [timeRange, setTimeRange] = useState<TimeRange>('day');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dayFilter, setDayFilter] = useState<DayFilter>('all');
 
   // 1. Filtrado de Datos
   const filteredRecords = useMemo(() => {
-    const now = Date.now();
     const msInDay = 24 * 60 * 60 * 1000;
 
+    if (timeRange === 'day') {
+      const startOfDay = new Date(selectedDate + 'T00:00:00').getTime();
+      const endOfDay = new Date(selectedDate + 'T23:59:59').getTime();
+
+      return records
+        .filter(r => r.timestamp >= startOfDay && r.timestamp <= endOfDay)
+        .filter(r => {
+          if (dayFilter === 'all') return true;
+          const date = new Date(r.timestamp);
+          const hours = date.getHours();
+          return hours >= 20 || hours < 8;
+        })
+        .reverse();
+    }
+
+    const now = Date.now();
     let cutoff = now;
-    if (timeRange === '24h') cutoff = now - msInDay;
     if (timeRange === '7d') cutoff = now - (7 * msInDay);
     if (timeRange === '30d') cutoff = now - (30 * msInDay);
 
@@ -27,11 +42,10 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
         if (dayFilter === 'all') return true;
         const date = new Date(r.timestamp);
         const hours = date.getHours();
-        // Noche: de 20:00 (8 PM) a 08:00 (8 AM)
         return hours >= 20 || hours < 8;
       })
-      .reverse(); // Recharts prefiere orden ascendente (viejo -> nuevo)
-  }, [records, timeRange, dayFilter]);
+      .reverse();
+  }, [records, timeRange, dayFilter, selectedDate]);
 
   const chartData = useMemo(() => {
     return filteredRecords.map(r => ({
@@ -65,7 +79,7 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
   const downloadMarkdown = () => {
     const text = `# REPORTE MÉDICO: ${patient}\n` +
       `Generado: ${new Date().toLocaleString()}\n` +
-      `Filtro: ${timeRange} | ${dayFilter === 'night' ? 'SOLO NOCHE (Apnea Monitor)' : 'Todo el día'}\n\n` +
+      `Filtro: ${timeRange === 'day' ? `Día ${selectedDate}` : timeRange} | ${dayFilter === 'night' ? 'SOLO NOCHE (Apnea Monitor)' : 'Todo el día'}\n\n` +
       `## Promedios del Periodo\n` +
       `- Presión: ${stats?.taSys}/${stats?.taDia}\n` +
       `- Pulso: ${stats?.fc} lpm\n` +
@@ -103,17 +117,29 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
             📊 Análisis Clínico
           </h1>
           <div className="flex bg-slate-100 p-1 rounded-xl">
-            {(['24h', '7d', '30d'] as TimeRange[]).map(t => (
+            {(['day', '7d', '30d'] as TimeRange[]).map(t => (
               <button
                 key={t}
                 onClick={() => setTimeRange(t)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${timeRange === t ? 'bg-white shadow text-blue-600' : 'text-slate-400'}`}
               >
-                {t}
+                {t === 'day' ? 'Día' : t}
               </button>
             ))}
           </div>
         </div>
+
+        {timeRange === 'day' && (
+          <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="flex-1 bg-transparent font-bold text-slate-800 outline-none"
+            />
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
