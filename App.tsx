@@ -32,15 +32,11 @@ const App: React.FC = () => {
   };
 
   const handleSaveVital = async (data: Omit<VitalRecord, 'id' | 'timestamp'>) => {
-    await dbService.saveVitalRecord(data);
-    alert("¡Guardado!");
-    setActiveModule(null);
+    return await dbService.saveVitalRecord(data);
   };
 
   const handleSaveMedicine = async (data: Omit<MedicineRecord, 'id' | 'timestamp'>) => {
-    await dbService.saveMedicineRecord(data);
-    alert("¡Medicina Guardada!");
-    setActiveModule(null);
+    return await dbService.saveMedicineRecord(data);
   };
 
   return (

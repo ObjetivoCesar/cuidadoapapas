@@ -31,7 +31,7 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
 
     setIsSaving(true);
     try {
-      await onSave({
+      const savedRecord = await onSave({
         patient: selectedPatient,
         nurseName: currentNurse,
         taSys: sys,
@@ -39,9 +39,15 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
         fc: pulse,
         fr: parseInt(fr),
         spo2: oxygen,
-      });
+      }) as any;
+
       setTaSys(''); setTaDia(''); setFc(''); setFr(''); setSpo2('');
-      alert('Registro guardado exitosamente');
+
+      if (savedRecord && !savedRecord.synced) {
+        alert('Guardado LOCALMENTE (Falla de sincronización con base de datos). Asegúrese de que la base de datos permite campos vacíos para presión arterial.');
+      } else {
+        alert('Registro guardado exitosamente en la nube');
+      }
     } catch (err) {
       alert('Error al guardar');
     } finally {

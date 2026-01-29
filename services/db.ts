@@ -16,8 +16,8 @@ export const dbService = {
       id: data.id,
       patient: data.patient,
       nurse_name: data.nurseName,
-      ta_sys: data.taSys,
-      ta_dia: data.taDia,
+      ta_sys: data.taSys ?? null,
+      ta_dia: data.taDia ?? null,
       fc: data.fc,
       fr: data.fr,
       spo2: data.spo2,
@@ -38,13 +38,19 @@ export const dbService = {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_KEY,
           'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal'
+          'Prefer': 'return=representation'
         },
         body: JSON.stringify(dbData)
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(`Error Supabase (${table}):`, errorData);
+      }
+
       return response.ok;
     } catch (e) {
-      console.error(`Error sincronizando ${table}:`, e);
+      console.error(`Error de red al sincronizar ${table}:`, e);
       return false;
     }
   },

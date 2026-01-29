@@ -19,13 +19,19 @@ const MedicineForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave }
 
         setIsSaving(true);
         try {
-            await onSave({
+            const savedRecord = await onSave({
                 patient: selectedPatient,
                 nurseName: currentNurse,
                 medicineName,
                 dose,
-            });
-            alert('Medicina registrada exitosamente');
+            }) as any;
+
+            setDose('');
+            if (savedRecord && !savedRecord.synced) {
+                alert('Medicina guardada LOCALMENTE. Error al subir a la nube.');
+            } else {
+                alert('Medicina registrada exitosamente');
+            }
         } catch (err) {
             alert('Error al guardar');
         } finally {
