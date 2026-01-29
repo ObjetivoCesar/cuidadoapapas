@@ -8,8 +8,8 @@ export interface VitalRecord {
   id: string;
   patient: Patient;
   nurseName: Nurse;
-  taSys: number;
-  taDia: number;
+  taSys?: number;
+  taDia?: number;
   fc: number;
   fr: number;
   spo2: number;

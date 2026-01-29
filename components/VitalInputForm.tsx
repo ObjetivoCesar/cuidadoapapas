@@ -18,15 +18,15 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validaciones de seguridad médica básicas
-    const sys = parseInt(taSys);
-    const dia = parseInt(taDia);
+    const sys = taSys ? parseInt(taSys) : undefined;
+    const dia = taDia ? parseInt(taDia) : undefined;
     const pulse = parseInt(fc);
     const oxygen = parseInt(spo2);
 
     if (oxygen > 100) return alert('La saturación no puede ser mayor a 100%');
-    if (sys < 40 || sys > 250) return alert('Presión Sistólica fuera de rango normal');
+    if (sys && (sys < 40 || sys > 250)) return alert('Presión Sistólica fuera de rango normal');
     if (pulse < 30 || pulse > 220) return alert('Frecuencia Cardíaca fuera de rango normal');
 
     setIsSaving(true);
@@ -70,11 +70,11 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
           <div className="col-span-2 flex gap-2">
             <div className="flex-1">
               <label className={labelClass}>TA (Sistólica)</label>
-              <input type="number" value={taSys} onChange={e => setTaSys(e.target.value)} placeholder="120" className={inputClass} inputMode="numeric" required />
+              <input type="number" value={taSys} onChange={e => setTaSys(e.target.value)} placeholder="120" className={inputClass} inputMode="numeric" />
             </div>
             <div className="flex-1">
               <label className={labelClass}>TA (Diastólica)</label>
-              <input type="number" value={taDia} onChange={e => setTaDia(e.target.value)} placeholder="80" className={inputClass} inputMode="numeric" required />
+              <input type="number" value={taDia} onChange={e => setTaDia(e.target.value)} placeholder="80" className={inputClass} inputMode="numeric" />
             </div>
           </div>
 
@@ -97,9 +97,8 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
         <button
           type="submit"
           disabled={isSaving}
-          className={`w-full mt-8 py-4 rounded-2xl text-white font-bold text-lg shadow-xl shadow-blue-200 transition-all active:scale-95 ${
-            isSaving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
-          }`}
+          className={`w-full mt-8 py-4 rounded-2xl text-white font-bold text-lg shadow-xl shadow-blue-200 transition-all active:scale-95 ${isSaving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
         >
           {isSaving ? 'Guardando...' : 'GUARDAR REGISTRO'}
         </button>
