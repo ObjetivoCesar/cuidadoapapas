@@ -55,6 +55,89 @@ export const dbService = {
     }
   },
 
+  fetchRemote: async (table: string): Promise<any[]> => {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return [];
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
+
+      if (!response.ok) throw new Error(`Fetch error: ${response.statusText}`);
+      const data = await response.json();
+
+      // Convert snake_case back to camelCase
+      return data.map((item: any) => {
+        if (table === 'vital_records') {
+          return {
+            id: item.id,
+            patient: item.patient,
+            nurseName: item.nurse_name,
+            taSys: item.ta_sys,
+            taDia: item.ta_dia,
+            fc: item.fc,
+            fr: item.fr,
+            spo2: item.spo2,
+            timestamp: item.timestamp,
+            synced: true
+          };
+        } else {
+          return {
+            id: item.id,
+            patient: item.patient,
+            nurseName: item.nurse_name,
+            medicineName: item.medicine_name,
+            dose: item.dose,
+            timestamp: item.timestamp,
+            synced: true
+          };
+        }
+      });
+    } catch (e) {
+      console.error(`Error al descargar ${table}:`, e);
+      return [];
+    }
+  },
+
+  syncFromRemote: async () => {
+    console.log('🔄 Iniciando sincronización completa...');
+    const remoteVitals = await dbService.fetchRemote('vital_records');
+    const remoteMedicines = await dbService.fetchRemote('medicine_records');
+
+    if (remoteVitals.length > 0) {
+      // Combinar con locales, evitando duplicados por ID
+      const localVitals = await dbService.getAllVitals();
+      const combinedVitals = [...remoteVitals];
+
+      localVitals.forEach(local => {
+        if (!combinedVitals.find(remote => remote.id === local.id)) {
+          combinedVitals.push(local);
+        }
+      });
+
+      combinedVitals.sort((a, b) => b.timestamp - a.timestamp);
+      localStorage.setItem(VITALS_KEY, JSON.stringify(combinedVitals));
+    }
+
+    if (remoteMedicines.length > 0) {
+      const localMedicines = await dbService.getAllMedicines();
+      const combinedMedicines = [...remoteMedicines];
+
+      localMedicines.forEach(local => {
+        if (!combinedMedicines.find(remote => remote.id === local.id)) {
+          combinedMedicines.push(local);
+        }
+      });
+
+      combinedMedicines.sort((a, b) => b.timestamp - a.timestamp);
+      localStorage.setItem(MEDICINE_KEY, JSON.stringify(combinedMedicines));
+    }
+    console.log('✅ Sincronización terminada.');
+  },
+
   saveVitalRecord: async (record: Omit<VitalRecord, 'id' | 'timestamp'>): Promise<VitalRecord> => {
     const newRecord: VitalRecord = {
       ...record,

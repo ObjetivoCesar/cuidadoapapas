@@ -18,9 +18,15 @@ const App: React.FC = () => {
   const [passInput, setPassInput] = useState('');
 
   const fetchRecords = useCallback(async () => {
+    await dbService.syncFromRemote(); // Sincronizar antes de leer
     const data = await dbService.getVitalsByPatient(selectedPatient);
     setRecords(data);
   }, [selectedPatient]);
+
+  useEffect(() => {
+    // Sincronización inicial silenciosa
+    dbService.syncFromRemote();
+  }, []);
 
   useEffect(() => {
     if (activeModule === AppModule.DASHBOARD) fetchRecords();
