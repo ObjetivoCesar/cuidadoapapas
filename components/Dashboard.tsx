@@ -1,16 +1,39 @@
 import React, { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, AreaChart, Area } from 'recharts';
-import { VitalRecord, Patient } from '../types';
+import { VitalRecord, MedicineRecord, Patient } from '../types';
 
-interface Props { records: VitalRecord[]; patient: Patient; }
+interface Props {
+  records: VitalRecord[];
+  medicines: MedicineRecord[];
+  patient: Patient;
+  onRefresh: () => void;
+}
 
 type TimeRange = 'day' | '7d' | '30d';
 type DayFilter = 'all' | 'night';
 
-const Dashboard: React.FC<Props> = ({ records, patient }) => {
+const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Usar fecha local real (clásica corrección de offset)
+  const getLocalDate = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().split('T')[0];
+  };
+  const [selectedDate, setSelectedDate] = useState(getLocalDate());
   const [dayFilter, setDayFilter] = useState<DayFilter>('all');
+
+  // Helpers para Ecuador (América/Guayaquil)
+  const formatEC = (ts: number, options: Intl.DateTimeFormatOptions) => {
+    return new Intl.DateTimeFormat('es-EC', {
+      ...options,
+      timeZone: 'America/Guayaquil'
+    }).format(new Date(ts));
+  };
+
+  const humanDate = (ts: number) => formatEC(ts, { weekday: 'short', day: '2-digit', month: 'short' });
+  const humanTime = (ts: number) => formatEC(ts, { hour: '2-digit', minute: '2-digit', hour12: false });
+  const humanFull = (ts: number) => `${humanDate(ts)}, ${humanTime(ts)}`;
 
   // 1. Filtrado de Datos
   const filteredRecords = useMemo(() => {
@@ -47,45 +70,68 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
       .reverse();
   }, [records, timeRange, dayFilter, selectedDate]);
 
+  const filteredMedicines = useMemo(() => {
+    if (timeRange === 'day') {
+      const startOfDay = new Date(selectedDate + 'T00:00:00').getTime();
+      const endOfDay = new Date(selectedDate + 'T23:59:59').getTime();
+      return medicines.filter(m => m.timestamp >= startOfDay && m.timestamp <= endOfDay).reverse();
+    }
+    const msInDay = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    let cutoff = now - (30 * msInDay);
+    if (timeRange === '7d') cutoff = now - (7 * msInDay);
+    return medicines.filter(m => m.timestamp >= cutoff).reverse();
+  }, [medicines, timeRange, selectedDate]);
+
   const chartData = useMemo(() => {
     return filteredRecords.map(r => ({
       ...r,
-      dateShort: new Date(r.timestamp).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }),
-      timeShort: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      fullLabel: `${new Date(r.timestamp).toLocaleDateString()} ${new Date(r.timestamp).toLocaleTimeString()}`,
+      dateShort: humanDate(r.timestamp),
+      timeShort: humanTime(r.timestamp),
+      fullLabel: humanFull(r.timestamp),
     }));
   }, [filteredRecords]);
 
   // 2. Estadísticas / Promedios
   const stats = useMemo(() => {
     if (filteredRecords.length === 0) return null;
-    const sum = filteredRecords.reduce((acc, r) => ({
-      taSys: acc.taSys + r.taSys,
-      taDia: acc.taDia + r.taDia,
-      fc: acc.fc + r.fc,
-      spo2: acc.spo2 + r.spo2,
-    }), { taSys: 0, taDia: 0, fc: 0, spo2: 0 });
 
-    const count = filteredRecords.length;
+    let sysSum = 0, sysCount = 0;
+    let diaSum = 0, diaCount = 0;
+    let fcSum = 0, fcCount = 0;
+    let spo2Sum = 0, spo2Count = 0;
+
+    filteredRecords.forEach(r => {
+      if (r.taSys) { sysSum += r.taSys; sysCount++; }
+      if (r.taDia) { diaSum += r.taDia; diaCount++; }
+      if (r.fc) { fcSum += r.fc; fcCount++; }
+      if (r.spo2) { spo2Sum += r.spo2; spo2Count++; }
+    });
+
     return {
-      taSys: Math.round(sum.taSys / count),
-      taDia: Math.round(sum.taDia / count),
-      fc: Math.round(sum.fc / count),
-      spo2: Math.round(sum.spo2 / count),
-      count
+      taSys: sysCount > 0 ? Math.round(sysSum / sysCount) : 0,
+      taDia: diaCount > 0 ? Math.round(diaSum / diaCount) : 0,
+      fc: fcCount > 0 ? Math.round(fcSum / fcCount) : 0,
+      spo2: spo2Count > 0 ? Math.round(spo2Sum / spo2Count) : 0,
+      count: filteredRecords.length
     };
   }, [filteredRecords]);
 
   const downloadMarkdown = () => {
+    const now = Date.now();
     const text = `# REPORTE MÉDICO: ${patient}\n` +
-      `Generado: ${new Date().toLocaleString()}\n` +
+      `Generado: ${humanFull(now)}\n` +
       `Filtro: ${timeRange === 'day' ? `Día ${selectedDate}` : timeRange} | ${dayFilter === 'night' ? 'SOLO NOCHE (Apnea Monitor)' : 'Todo el día'}\n\n` +
       `## Promedios del Periodo\n` +
       `- Presión: ${stats?.taSys}/${stats?.taDia}\n` +
       `- Pulso: ${stats?.fc} lpm\n` +
       `- Saturación O2: ${stats?.spo2}%\n\n` +
-      `| Fecha | Hora | TA | FC | SPO2 |\n|---|---|---|---|---|\n` +
-      filteredRecords.slice().reverse().map(r => `| ${new Date(r.timestamp).toLocaleDateString()} | ${new Date(r.timestamp).toLocaleTimeString()} | ${r.taSys}/${r.taDia} | ${r.fc} | ${r.spo2}% |`).join('\n');
+      `## Historial de Signos Vitales\n` +
+      `| Fecha | Hora | TA | FC | SPO2 | Enfermera |\n|---|---|---|---|---|---|\n` +
+      filteredRecords.slice().reverse().map(r => `| ${humanDate(r.timestamp)} | ${humanTime(r.timestamp)} | ${r.taSys}/${r.taDia} | ${r.fc} | ${r.spo2}% | ${r.nurseName} |`).join('\n') +
+      `\n\n## Historial de Medicinas\n` +
+      `| Fecha | Hora | Medicina | Dosis | Enfermera |\n|---|---|---|---|---|\n` +
+      filteredMedicines.slice().reverse().map(m => `| ${humanDate(m.timestamp)} | ${humanTime(m.timestamp)} | ${m.medicineName} | ${m.dose} | ${m.nurseName} |`).join('\n');
 
     const blob = new Blob([text], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
@@ -113,9 +159,16 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
       {/* HEADER Y FILTROS */}
       <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 no-print space-y-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            📊 Análisis Clínico
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-black text-slate-800">📊 Análisis Clínico</h1>
+            <button
+              onClick={onRefresh}
+              className="bg-blue-600 text-white p-1 rounded-full hover:rotate-180 transition-all shadow-md"
+              title="Sincronizar ahora"
+            >
+              🔄
+            </button>
+          </div>
           <div className="flex bg-slate-100 p-1 rounded-xl">
             {(['day', '7d', '30d'] as TimeRange[]).map(t => (
               <button
@@ -205,18 +258,30 @@ const Dashboard: React.FC<Props> = ({ records, patient }) => {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* GRÁFICO 3: FRECUENCIA CARDÍACA */}
-      <ChartCard title="Frecuencia Cardíaca" icon="❤️">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="timeShort" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 10 }} domain={['dataMin - 5', 'dataMax + 5']} />
-            <Tooltip content={<CustomTooltip />} />
-            <Line type="monotone" dataKey="fc" name="Pulso" stroke="#e11d48" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {/* HISTORIAL DE MEDICINAS */}
+      <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
+        <h3 className="font-black text-slate-800 flex items-center gap-2">
+          <span className="text-xl">💊</span> Historial de Medicinas
+        </h3>
+
+        {filteredMedicines.length === 0 ? (
+          <p className="text-xs text-slate-400 italic text-center py-4">No hay registros de medicina en este periodo</p>
+        ) : (
+          <div className="space-y-3">
+            {filteredMedicines.map(m => (
+              <div key={m.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <div>
+                  <p className="text-sm font-black text-slate-800">{m.medicineName}</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">{m.dose} • {m.nurseName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-900">{humanTime(m.timestamp)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-4 no-print mt-8">
         <button onClick={downloadMarkdown} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-bold text-xs shadow-lg">DESCARGAR INFORME ({timeRange})</button>

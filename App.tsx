@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AppModule | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient>(Patient.JORGE);
   const [records, setRecords] = useState<VitalRecord[]>([]);
+  const [medicines, setMedicines] = useState<MedicineRecord[]>([]);
   const [passInput, setPassInput] = useState('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncMsg, setSyncMsg] = useState('');
@@ -33,8 +34,12 @@ const App: React.FC = () => {
 
   const fetchRecords = useCallback(async () => {
     await performSync(false);
-    const data = await dbService.getVitalsByPatient(selectedPatient);
-    setRecords(data);
+    const [vModel, mModel] = await Promise.all([
+      dbService.getVitalsByPatient(selectedPatient),
+      dbService.getMedicinesByPatient(selectedPatient)
+    ]);
+    setRecords(vModel);
+    setMedicines(mModel);
   }, [selectedPatient, performSync]);
 
   useEffect(() => {
@@ -42,7 +47,7 @@ const App: React.FC = () => {
   }, [performSync]);
 
   useEffect(() => {
-    if (activeModule === AppModule.DASHBOARD) fetchRecords();
+    if (activeModule === AppModule.DASHBOARD || activeModule === null) fetchRecords();
   }, [fetchRecords, activeModule]);
 
   const handleAdminLogin = () => {
@@ -91,8 +96,8 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button onClick={() => setActiveModule(null)} className="text-blue-600 font-bold text-xs tracking-tighter uppercase">← Menú</button>
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[8px] font-bold uppercase transition-all ${syncStatus === 'syncing' ? 'bg-blue-100 text-blue-600 animate-pulse' :
-                    syncStatus === 'success' ? 'bg-emerald-100 text-emerald-600' :
-                      syncStatus === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-400'
+                  syncStatus === 'success' ? 'bg-emerald-100 text-emerald-600' :
+                    syncStatus === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-400'
                   }`}>
                   <span className="text-[10px]">{syncStatus === 'error' ? '☁️⚠️' : '☁️'}</span>
                   {syncMsg || 'Al día'}
@@ -127,7 +132,7 @@ const App: React.FC = () => {
             ) : activeModule === AppModule.MEDICINES ? (
               <MedicineForm selectedPatient={selectedPatient} currentNurse={currentNurse!} onSave={handleSaveMedicine} />
             ) : (
-              <Dashboard records={records} patient={selectedPatient} />
+              <Dashboard records={records} patient={selectedPatient} medicines={medicines} onRefresh={fetchRecords} />
             )}
           </main>
         </div>

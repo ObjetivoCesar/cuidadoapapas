@@ -55,11 +55,13 @@ export const dbService = {
     }
   },
 
-  fetchRemote: async (table: string, sinceDays: number = 30): Promise<any[]> => {
+  fetchRemote: async (table: string, sinceDays: number = 60): Promise<any[]> => {
     if (!SUPABASE_URL || !SUPABASE_KEY) return [];
     try {
       const cutoff = Date.now() - (sinceDays * 24 * 60 * 60 * 1000);
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&timestamp=gte.${cutoff}`, {
+      // Usar sintaxis PostgREST estándar para gte
+      const url = `${SUPABASE_URL}/rest/v1/${table}?select=*&timestamp=gte.${cutoff}&order=timestamp.desc`;
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'apikey': SUPABASE_KEY,
@@ -201,6 +203,11 @@ export const dbService = {
 
   getVitalsByPatient: async (patient: Patient): Promise<VitalRecord[]> => {
     const all = await dbService.getAllVitals();
+    return all.filter(r => r.patient === patient).sort((a, b) => b.timestamp - a.timestamp);
+  },
+
+  getMedicinesByPatient: async (patient: Patient): Promise<MedicineRecord[]> => {
+    const all = await dbService.getAllMedicines();
     return all.filter(r => r.patient === patient).sort((a, b) => b.timestamp - a.timestamp);
   }
 };
