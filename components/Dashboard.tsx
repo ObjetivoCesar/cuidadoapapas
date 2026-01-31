@@ -315,7 +315,20 @@ const Dashboard: React.FC<Props> = ({ records, medicines, reports, patient, onRe
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* GRÁFICO 3: GLUCOSA */}
+      {/* GRÁFICO 3: FRECUENCIA CARDÍACA */}
+      <ChartCard title="Frecuencia Cardíaca" icon="❤️">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="timeShort" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 10 }} domain={['dataMin - 5', 'dataMax + 5']} />
+            <Tooltip content={<CustomTooltip />} />
+            <Line type="monotone" dataKey="fc" name="Pulso" stroke="#e11d48" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      {/* GRÁFICO 4: GLUCOSA */}
       <ChartCard title="Glucosa (mg/dl)" icon="💉">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData}>
