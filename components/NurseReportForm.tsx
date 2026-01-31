@@ -115,6 +115,32 @@ const NurseReportForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSav
             {/* Informe Detallado */}
             <div className={sectionClass}>
                 <label className={labelClass}>Informe Detallado (Bitácora)</label>
+
+                {/* Sugerencias Rápidas */}
+                <div className="mb-4">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Sugerencias Rápidas:</span>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            'Micción espontánea',
+                            'Deposición normal',
+                            'Alimentación adecuada',
+                            'Tranquilo/a durante el turno',
+                            'Intranquilo/a por momentos',
+                            'Dolor controlado',
+                            'Sin novedades'
+                        ].map(suggestion => (
+                            <button
+                                key={suggestion}
+                                type="button"
+                                onClick={() => setContent(prev => prev ? `${prev}. ${suggestion}` : suggestion)}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-slate-600 rounded-full text-[11px] font-semibold transition-all active:scale-95"
+                            >
+                                + {suggestion}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 <textarea
                     value={content}
                     onChange={e => setContent(e.target.value)}

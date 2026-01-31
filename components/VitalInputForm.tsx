@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Patient, VitalRecord, Nurse } from '../types';
+import RangeIndicator from './RangeIndicator';
 
 interface Props {
   selectedPatient: Patient;
@@ -27,9 +28,20 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
     const oxygen = parseInt(spo2);
     const glu = glucose ? parseInt(glucose) : undefined;
 
-    if (oxygen > 100) return alert('La saturación no puede ser mayor a 100%');
-    if (sys && (sys < 40 || sys > 250)) return alert('Presión Sistólica fuera de rango normal');
-    if (pulse < 30 || pulse > 220) return alert('Frecuencia Cardíaca fuera de rango normal');
+    // Validaciones críticas
+    if (oxygen > 100) return alert('⚠️ La saturación no puede ser mayor a 100%');
+    if (oxygen < 70) return alert('🚨 ALERTA: Saturación crítica (<70%). Verificar inmediatamente.');
+    if (sys && (sys < 40 || sys > 250)) return alert('⚠️ Presión Sistólica fuera de rango normal (40-250)');
+    if (pulse < 30 || pulse > 220) return alert('⚠️ Frecuencia Cardíaca fuera de rango normal (30-220)');
+    if (glu && (glu < 40 || glu > 600)) return alert('⚠️ Glucosa fuera de rango seguro (40-600 mg/dl)');
+
+    // Alertas preventivas (no bloquean el guardado)
+    if (glu && glu > 180) {
+      if (!confirm('⚠️ Glucosa elevada (>180 mg/dl). ¿Desea continuar con el registro?')) return;
+    }
+    if (glu && glu < 70) {
+      if (!confirm('⚠️ Hipoglucemia detectada (<70 mg/dl). ¿Desea continuar con el registro?')) return;
+    }
 
     setIsSaving(true);
     try {
@@ -47,12 +59,12 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
       setTaSys(''); setTaDia(''); setFc(''); setFr(''); setSpo2(''); setGlucose('');
 
       if (savedRecord && !savedRecord.synced) {
-        alert('Guardado LOCALMENTE (Falla de sincronización con base de datos). Asegúrese de que la base de datos permite campos vacíos para presión arterial.');
+        alert('✅ Guardado LOCALMENTE (Sin conexión). Se sincronizará automáticamente cuando haya internet.');
       } else {
-        alert('Registro guardado exitosamente en la nube');
+        alert('✅ Registro guardado exitosamente en la nube');
       }
     } catch (err) {
-      alert('Error al guardar');
+      alert('❌ Error al guardar. Intente nuevamente.');
     } finally {
       setIsSaving(false);
     }
@@ -90,6 +102,7 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
           <div>
             <label className={labelClass}>F.C. (Pulso)</label>
             <input type="number" value={fc} onChange={e => setFc(e.target.value)} placeholder="72" className={inputClass} inputMode="numeric" required />
+            <RangeIndicator label="FC" value={fc} min={30} max={220} optimalMin={60} optimalMax={100} unit=" lpm" />
           </div>
 
           <div>
@@ -100,11 +113,13 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
           <div className="col-span-2">
             <label className={labelClass}>Glucosa (opcional)</label>
             <input type="number" value={glucose} onChange={e => setGlucose(e.target.value)} placeholder="110" className={inputClass} inputMode="numeric" />
+            <RangeIndicator label="Glucosa" value={glucose} min={40} max={600} optimalMin={70} optimalMax={140} unit=" mg/dl" />
           </div>
 
           <div className="col-span-2">
             <label className={labelClass}>SPO2 (%)</label>
             <input type="number" value={spo2} onChange={e => setSpo2(e.target.value)} placeholder="98" className={inputClass} inputMode="numeric" required />
+            <RangeIndicator label="SPO2" value={spo2} min={70} max={100} optimalMin={95} optimalMax={100} unit="%" />
           </div>
         </div>
 
