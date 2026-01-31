@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Patient, VitalRecord, MedicineRecord, Nurse, UserRole, AppModule } from './types';
+import { Patient, VitalRecord, MedicineRecord, Nurse, UserRole, AppModule, ScheduledMedicine, NurseReport } from './types';
 import { dbService } from './services/db';
 import VitalInputForm from './components/VitalInputForm';
-import MedicineForm from './components/MedicineForm';
+import MedicineChecklist from './components/MedicineChecklist';
+import NurseReportForm from './components/NurseReportForm';
 import Dashboard from './components/Dashboard';
 
 const NURSES: Nurse[] = ['Mónica', 'Yesse', 'Génesis', 'Maricela'];
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<Patient>(Patient.JORGE);
   const [records, setRecords] = useState<VitalRecord[]>([]);
   const [medicines, setMedicines] = useState<MedicineRecord[]>([]);
+  const [reports, setReports] = useState<NurseReport[]>([]);
   const [passInput, setPassInput] = useState('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncMsg, setSyncMsg] = useState('');
@@ -33,13 +35,18 @@ const App: React.FC = () => {
   }, []);
 
   const fetchRecords = useCallback(async () => {
+    // Sincronizar antes de cargar
     await performSync(false);
-    const [vModel, mModel] = await Promise.all([
+
+    const [vModel, mModel, rModel] = await Promise.all([
       dbService.getVitalsByPatient(selectedPatient),
-      dbService.getMedicinesByPatient(selectedPatient)
+      dbService.getMedicinesByPatient(selectedPatient),
+      dbService.getReportsByPatient(selectedPatient)
     ]);
+
     setRecords(vModel);
     setMedicines(mModel);
+    setReports(rModel);
   }, [selectedPatient, performSync]);
 
   useEffect(() => {
@@ -47,7 +54,8 @@ const App: React.FC = () => {
   }, [performSync]);
 
   useEffect(() => {
-    if (activeModule === AppModule.DASHBOARD || activeModule === null) fetchRecords();
+    // Cargar datos cuando cambia el paciente o se entra a un módulo relevante
+    fetchRecords();
   }, [fetchRecords, activeModule]);
 
   const handleAdminLogin = () => {
@@ -56,12 +64,38 @@ const App: React.FC = () => {
   };
 
   const handleSaveVital = async (data: Omit<VitalRecord, 'id' | 'timestamp'>) => {
-    return await dbService.saveVitalRecord(data);
+    const res = await dbService.saveVitalRecord(data);
+    await fetchRecords();
+    return res;
   };
 
-  const handleSaveMedicine = async (data: Omit<MedicineRecord, 'id' | 'timestamp'>) => {
-    return await dbService.saveMedicineRecord(data);
+  const handleMarkMedicineAsTaken = async (m: ScheduledMedicine) => {
+    try {
+      await dbService.saveMedicineRecord({
+        patient: selectedPatient,
+        nurseName: currentNurse!,
+        medicineName: m.name,
+        dose: m.dose
+      });
+      await fetchRecords();
+    } catch (err) {
+      alert("Error al registrar toma de medicina");
+    }
   };
+
+  const handleSaveReport = async (data: Omit<NurseReport, 'id' | 'timestamp'>) => {
+    await dbService.saveNurseReport(data);
+    await fetchRecords();
+  };
+
+  // Filtrar medicines de HOY para el checklist
+  const todayMedicines = medicines.filter(m => {
+    const d = new Date(m.timestamp);
+    const now = new Date();
+    return d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+  });
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -103,36 +137,55 @@ const App: React.FC = () => {
                   {syncMsg || 'Al día'}
                 </div>
               </div>
-              <span className="bg-slate-900 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">{selectedPatient}</span>
+              <div className="flex items-center gap-2">
+                {currentNurse && <span className="text-[8px] font-bold text-blue-600 italic">{currentNurse}</span>}
+                <span className="bg-slate-900 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">{selectedPatient}</span>
+              </div>
             </div>
             <div className="flex bg-slate-100 p-1 rounded-2xl">
               <button onClick={() => setSelectedPatient(Patient.JORGE)} className={`flex-1 py-2 rounded-xl text-xs font-black ${selectedPatient === Patient.JORGE ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>PAPA JORGE</button>
               <button onClick={() => setSelectedPatient(Patient.TERESA)} className={`flex-1 py-2 rounded-xl text-xs font-black ${selectedPatient === Patient.TERESA ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}>MAMA TERESA</button>
             </div>
           </header>
+
           <main className="p-4 flex-1">
             {activeModule === null ? (
               <div className="space-y-4 pt-10">
-                <button onClick={() => setActiveModule(AppModule.VITALS)} className="w-full bg-white p-6 rounded-[2rem] shadow-xl border border-blue-50 flex items-center gap-4">
-                  <span className="text-3xl">🫀</span>
+                <button onClick={() => setActiveModule(AppModule.VITALS)} className="group w-full bg-white p-6 rounded-[2rem] shadow-xl border border-blue-50 flex items-center gap-4 active:scale-95 transition-all">
+                  <span className="text-3xl bg-blue-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">🫀</span>
                   <div className="text-left font-black text-slate-800 text-lg">Registrar Signos</div>
                 </button>
-                <button onClick={() => setActiveModule(AppModule.MEDICINES)} className="w-full bg-white p-6 rounded-[2rem] shadow-xl border border-emerald-50 flex items-center gap-4">
-                  <span className="text-3xl">💊</span>
-                  <div className="text-left font-black text-slate-800 text-lg">Registrar Medicina</div>
+                <button onClick={() => setActiveModule(AppModule.MEDICINES)} className="group w-full bg-white p-6 rounded-[2rem] shadow-xl border border-emerald-50 flex items-center gap-4 active:scale-95 transition-all">
+                  <span className="text-3xl bg-emerald-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">💊</span>
+                  <div className="text-left font-black text-slate-800 text-lg">Checklist Medicina</div>
                 </button>
-                <button onClick={() => setActiveModule(AppModule.DASHBOARD)} className="w-full bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 flex items-center gap-4">
-                  <span className="text-3xl">📊</span>
-                  <div className="text-left font-black text-slate-800 text-lg">Ver Estadísticas</div>
+                <button onClick={() => setActiveModule(AppModule.REPORTS)} className="group w-full bg-white p-6 rounded-[2rem] shadow-xl border border-indigo-50 flex items-center gap-4 active:scale-95 transition-all">
+                  <span className="text-3xl bg-indigo-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">📝</span>
+                  <div className="text-left font-black text-slate-800 text-lg">Informe del Turno</div>
                 </button>
-                <button onClick={() => { setRole(null); setCurrentNurse(null); }} className="w-full p-4 text-slate-400 font-bold text-xs uppercase tracking-widest">Cerrar Sesión</button>
+                <button onClick={() => setActiveModule(AppModule.DASHBOARD)} className="group w-full bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 flex items-center gap-4 active:scale-95 transition-all">
+                  <span className="text-3xl bg-slate-50 p-3 rounded-2xl group-hover:scale-110 transition-transform">📊</span>
+                  <div className="text-left font-black text-slate-800 text-lg">Ver Historial</div>
+                </button>
+                <button onClick={() => { setRole(null); setCurrentNurse(null); }} className="w-full p-4 text-slate-400 font-bold text-xs uppercase tracking-widest mt-10">Cerrar Sesión</button>
               </div>
             ) : activeModule === AppModule.VITALS ? (
               <VitalInputForm selectedPatient={selectedPatient} currentNurse={currentNurse!} onSave={handleSaveVital} />
             ) : activeModule === AppModule.MEDICINES ? (
-              <MedicineForm selectedPatient={selectedPatient} currentNurse={currentNurse!} onSave={handleSaveMedicine} />
+              <MedicineChecklist
+                selectedPatient={selectedPatient}
+                currentNurse={currentNurse!}
+                todayRecords={todayMedicines}
+                onMarkAsTaken={handleMarkMedicineAsTaken}
+              />
+            ) : activeModule === AppModule.REPORTS ? (
+              <NurseReportForm
+                selectedPatient={selectedPatient}
+                currentNurse={currentNurse!}
+                onSave={handleSaveReport}
+              />
             ) : (
-              <Dashboard records={records} patient={selectedPatient} medicines={medicines} onRefresh={fetchRecords} />
+              <Dashboard records={records} patient={selectedPatient} medicines={medicines} onRefresh={fetchRecords} reports={reports} />
             )}
           </main>
         </div>

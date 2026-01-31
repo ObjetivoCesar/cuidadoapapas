@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, AreaChart, Area } from 'recharts';
-import { VitalRecord, MedicineRecord, Patient } from '../types';
+import { VitalRecord, MedicineRecord, Patient, NurseReport } from '../types';
 
 interface Props {
   records: VitalRecord[];
   medicines: MedicineRecord[];
+  reports: NurseReport[];
   patient: Patient;
   onRefresh: () => void;
 }
@@ -12,7 +13,7 @@ interface Props {
 type TimeRange = 'day' | '7d' | '30d';
 type DayFilter = 'all' | 'night';
 
-const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) => {
+const Dashboard: React.FC<Props> = ({ records, medicines, reports, patient, onRefresh }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   // Usar fecha local real (clásica corrección de offset)
   const getLocalDate = () => {
@@ -71,17 +72,34 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
   }, [records, timeRange, dayFilter, selectedDate]);
 
   const filteredMedicines = useMemo(() => {
-    if (timeRange === 'day') {
-      const startOfDay = new Date(selectedDate + 'T00:00:00').getTime();
-      const endOfDay = new Date(selectedDate + 'T23:59:59').getTime();
-      return medicines.filter(m => m.timestamp >= startOfDay && m.timestamp <= endOfDay).reverse();
-    }
     const msInDay = 24 * 60 * 60 * 1000;
     const now = Date.now();
     let cutoff = now - (30 * msInDay);
-    if (timeRange === '7d') cutoff = now - (7 * msInDay);
-    return medicines.filter(m => m.timestamp >= cutoff).reverse();
+    if (timeRange === 'day') {
+      cutoff = new Date(selectedDate + 'T00:00:00').getTime();
+    } else if (timeRange === '7d') {
+      cutoff = now - (7 * msInDay);
+    }
+
+    return medicines
+      .filter(m => m.timestamp >= cutoff && (timeRange !== 'day' || m.timestamp <= new Date(selectedDate + 'T23:59:59').getTime()))
+      .reverse();
   }, [medicines, timeRange, selectedDate]);
+
+  const filteredReports = useMemo(() => {
+    const msInDay = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    let cutoff = now - (30 * msInDay);
+    if (timeRange === 'day') {
+      cutoff = new Date(selectedDate + 'T00:00:00').getTime();
+    } else if (timeRange === '7d') {
+      cutoff = now - (7 * msInDay);
+    }
+
+    return reports
+      .filter(r => r.timestamp >= cutoff && (timeRange !== 'day' || r.timestamp <= new Date(selectedDate + 'T23:59:59').getTime()))
+      .reverse();
+  }, [reports, timeRange, selectedDate]);
 
   const chartData = useMemo(() => {
     return filteredRecords.map(r => ({
@@ -126,7 +144,16 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
       `- Presión: ${stats?.taSys}/${stats?.taDia}\n` +
       `- Pulso: ${stats?.fc} lpm\n` +
       `- Saturación O2: ${stats?.spo2}%\n\n` +
-      `## Historial de Signos Vitales\n` +
+      `## Bitácora de Salud (Informes de Turno)\n` +
+      filteredReports.map(r =>
+        `### ${humanFull(r.timestamp)} - Enfermera: ${r.nurseName}\n` +
+        `**Estado**: Evacuación: ${r.observations?.bowelMovement ? 'SÍ' : 'NO'} | ` +
+        `Sueño: ${r.observations?.sleepQuality} | ` +
+        `Humor: ${r.observations?.mood} | ` +
+        `Apetito: ${r.observations?.appetite}\n\n` +
+        `**Detalle**: ${r.content}\n`
+      ).join('\n---\n') +
+      `\n\n## Historial de Signos Vitales\n` +
       `| Fecha | Hora | TA | FC | SPO2 | Enfermera |\n|---|---|---|---|---|---|\n` +
       filteredRecords.slice().reverse().map(r => `| ${humanDate(r.timestamp)} | ${humanTime(r.timestamp)} | ${r.taSys}/${r.taDia} | ${r.fc} | ${r.spo2}% | ${r.nurseName} |`).join('\n') +
       `\n\n## Historial de Medicinas\n` +
@@ -205,9 +232,40 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
             onClick={() => setDayFilter('night')}
             className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 ${dayFilter === 'night' ? 'bg-indigo-900 text-white border-indigo-900' : 'bg-white text-indigo-900 border-indigo-100'}`}
           >
-            🌙 Solo Noche <span className="opacity-70 font-normal">(Apnea)</span>
+            🌙 Solo Noche
           </button>
         </div>
+      </div>
+
+      {/* BITÁCORA DE TURNO - NUEVO */}
+      <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-indigo-50 space-y-4">
+        <h3 className="font-black text-indigo-900 flex items-center gap-2">
+          <span className="text-xl">📝</span> Bitácora de Salud
+        </h3>
+
+        {filteredReports.length === 0 ? (
+          <p className="text-xs text-slate-400 italic text-center py-4">No hay informes para este periodo</p>
+        ) : (
+          <div className="space-y-4">
+            {filteredReports.map(r => (
+              <div key={r.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] font-black text-indigo-600 uppercase italic">{r.nurseName}</span>
+                  <span className="text-[10px] font-bold text-slate-400">{humanFull(r.timestamp)}</span>
+                </div>
+
+                <p className="text-sm font-medium text-slate-700 leading-relaxed">{r.content}</p>
+
+                <div className="flex gap-2 pt-2 border-t border-slate-100 overflow-x-auto">
+                  {r.observations?.bowelMovement && <span className="bg-emerald-100 text-emerald-700 text-[8px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">💩 Evacuación</span>}
+                  <span className="bg-blue-100 text-blue-700 text-[8px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">😴 {r.observations?.sleepQuality}</span>
+                  <span className="bg-indigo-100 text-indigo-700 text-[8px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">😊 {r.observations?.mood}</span>
+                  <span className="bg-orange-100 text-orange-700 text-[8px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🍕 {r.observations?.appetite}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* RESUMEN DE PROMEDIOS */}
@@ -237,7 +295,7 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* GRÁFICO 2: OXIGENACIÓN (SPO2) - CRÍTICO PARA APNEA */}
+      {/* GRÁFICO 2: OXIGENACIÓN (SPO2) */}
       <ChartCard title="Saturación de Oxígeno (SPO2)" icon="🫁">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
@@ -249,25 +307,11 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="timeShort" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            {/* ESCALA FIJA 80-100 PARA VER CAÍDAS */}
             <YAxis tick={{ fontSize: 10 }} domain={[80, 100]} />
             <Tooltip content={<CustomTooltip />} />
             <ReferenceLine y={90} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Alerta 90%', fill: '#f59e0b', fontSize: 10 }} />
             <Area type="monotone" dataKey="spo2" name="SPO2 %" stroke="#10b981" fillOpacity={1} fill="url(#colorSpo2)" strokeWidth={2} />
           </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      {/* GRÁFICO 3: FRECUENCIA CARDÍACA */}
-      <ChartCard title="Frecuencia Cardíaca" icon="❤️">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="timeShort" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 10 }} domain={['dataMin - 5', 'dataMax + 5']} />
-            <Tooltip content={<CustomTooltip />} />
-            <Line type="monotone" dataKey="fc" name="Pulso" stroke="#e11d48" strokeWidth={2} dot={false} />
-          </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
@@ -278,7 +322,7 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
         </h3>
 
         {filteredMedicines.length === 0 ? (
-          <p className="text-xs text-slate-400 italic text-center py-4">No hay registros de medicina en este periodo</p>
+          <p className="text-xs text-slate-400 italic text-center py-4">No hay registros de medicina</p>
         ) : (
           <div className="space-y-3">
             {filteredMedicines.map(m => (
@@ -297,7 +341,7 @@ const Dashboard: React.FC<Props> = ({ records, medicines, patient, onRefresh }) 
       </div>
 
       <div className="flex gap-4 no-print mt-8">
-        <button onClick={downloadMarkdown} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-bold text-xs shadow-lg">DESCARGAR INFORME ({timeRange})</button>
+        <button onClick={downloadMarkdown} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition-all">DESCARGAR INFORME ({timeRange})</button>
       </div>
     </div>
   );
