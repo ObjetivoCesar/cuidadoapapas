@@ -154,8 +154,8 @@ const Dashboard: React.FC<Props> = ({ records, medicines, reports, patient, onRe
         `**Detalle**: ${r.content}\n`
       ).join('\n---\n') +
       `\n\n## Historial de Signos Vitales\n` +
-      `| Fecha | Hora | TA | FC | SPO2 | Enfermera |\n|---|---|---|---|---|---|\n` +
-      filteredRecords.slice().reverse().map(r => `| ${humanDate(r.timestamp)} | ${humanTime(r.timestamp)} | ${r.taSys}/${r.taDia} | ${r.fc} | ${r.spo2}% | ${r.nurseName} |`).join('\n') +
+      `| Fecha | Hora | TA | FC | SPO2 | Gluco | Enfermera |\n|---|---|---|---|---|---|---|\n` +
+      filteredRecords.slice().reverse().map(r => `| ${humanDate(r.timestamp)} | ${humanTime(r.timestamp)} | ${r.taSys}/${r.taDia} | ${r.fc} | ${r.spo2}% | ${r.glucose ?? '-'} | ${r.nurseName} |`).join('\n') +
       `\n\n## Historial de Medicinas\n` +
       `| Fecha | Hora | Medicina | Dosis | Enfermera |\n|---|---|---|---|---|\n` +
       filteredMedicines.slice().reverse().map(m => `| ${humanDate(m.timestamp)} | ${humanTime(m.timestamp)} | ${m.medicineName} | ${m.dose} | ${m.nurseName} |`).join('\n');
@@ -315,6 +315,20 @@ const Dashboard: React.FC<Props> = ({ records, medicines, reports, patient, onRe
         </ResponsiveContainer>
       </ChartCard>
 
+      {/* GRÁFICO 3: GLUCOSA */}
+      <ChartCard title="Glucosa (mg/dl)" icon="💉">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="timeShort" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 10 }} domain={['dataMin - 10', 'dataMax + 10']} />
+            <Tooltip content={<CustomTooltip />} />
+            <ReferenceLine y={140} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'right', value: '140', fill: '#ef4444', fontSize: 10 }} />
+            <Line type="monotone" dataKey="glucose" name="Glucosa" stroke="#8b5cf6" strokeWidth={2} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
       {/* HISTORIAL DE MEDICINAS */}
       <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 space-y-4">
         <h3 className="font-black text-slate-800 flex items-center gap-2">
@@ -343,7 +357,7 @@ const Dashboard: React.FC<Props> = ({ records, medicines, reports, patient, onRe
       <div className="flex gap-4 no-print mt-8">
         <button onClick={downloadMarkdown} className="flex-1 p-4 bg-slate-800 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition-all">DESCARGAR INFORME ({timeRange})</button>
       </div>
-    </div>
+    </div >
   );
 };
 

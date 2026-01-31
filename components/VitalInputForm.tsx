@@ -14,6 +14,7 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
   const [fc, setFc] = useState('');
   const [fr, setFr] = useState('');
   const [spo2, setSpo2] = useState('');
+  const [glucose, setGlucose] = useState(''); // Nueva medición
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +25,7 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
     const dia = taDia ? parseInt(taDia) : undefined;
     const pulse = parseInt(fc);
     const oxygen = parseInt(spo2);
+    const glu = glucose ? parseInt(glucose) : undefined;
 
     if (oxygen > 100) return alert('La saturación no puede ser mayor a 100%');
     if (sys && (sys < 40 || sys > 250)) return alert('Presión Sistólica fuera de rango normal');
@@ -39,9 +41,10 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
         fc: pulse,
         fr: parseInt(fr),
         spo2: oxygen,
+        glucose: glu,
       }) as any;
 
-      setTaSys(''); setTaDia(''); setFc(''); setFr(''); setSpo2('');
+      setTaSys(''); setTaDia(''); setFc(''); setFr(''); setSpo2(''); setGlucose('');
 
       if (savedRecord && !savedRecord.synced) {
         alert('Guardado LOCALMENTE (Falla de sincronización con base de datos). Asegúrese de que la base de datos permite campos vacíos para presión arterial.');
@@ -92,6 +95,11 @@ const VitalInputForm: React.FC<Props> = ({ selectedPatient, currentNurse, onSave
           <div>
             <label className={labelClass}>F.R. (Resp.)</label>
             <input type="number" value={fr} onChange={e => setFr(e.target.value)} placeholder="16" className={inputClass} inputMode="numeric" required />
+          </div>
+
+          <div className="col-span-2">
+            <label className={labelClass}>Glucosa (opcional)</label>
+            <input type="number" value={glucose} onChange={e => setGlucose(e.target.value)} placeholder="110" className={inputClass} inputMode="numeric" />
           </div>
 
           <div className="col-span-2">

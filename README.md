@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS vital_records (
     fc INTEGER NOT NULL,
     fr INTEGER NOT NULL,
     spo2 INTEGER NOT NULL,
+    glucose INTEGER, -- Medición de glucometría opcional
     timestamp BIGINT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

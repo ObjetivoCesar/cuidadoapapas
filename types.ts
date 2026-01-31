@@ -31,6 +31,7 @@ export interface VitalRecord {
   fc: number;
   fr: number;
   spo2: number;
+  glucose?: number; // Nueva medición detectada en reportes manuales
   timestamp: number;
   synced?: boolean;
 }

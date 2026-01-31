@@ -31,6 +31,7 @@ export const dbService = {
         fc: data.fc,
         fr: data.fr,
         spo2: data.spo2,
+        glucose: data.glucose ?? null,
         timestamp: data.timestamp
       };
     } else if (table === 'medicine_records') {
@@ -99,6 +100,7 @@ export const dbService = {
             fc: item.fc,
             fr: item.fr,
             spo2: item.spo2,
+            glucose: item.glucose ?? undefined,
             timestamp: item.timestamp,
             synced: true
           };
