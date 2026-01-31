@@ -27,54 +27,73 @@ Una aplicación móvil (PWA) diseñada para que las enfermeras registren signos 
 
 ## 🔧 Configuración de la Base de Datos (Supabase)
 
-Para que la aplicación funcione correctamente con la nube, la base de datos debe tener dos tablas principales:
+Para que la aplicación funcione con sincronización en la nube, ejecuta el siguiente script en el **SQL Editor** de Supabase. Esto creará las tablas con soporte para UUID y tipos de datos avanzados (JSONB).
 
-### 1. `vital_records`
-| Columna | Tipo | Notas |
-| :--- | :--- | :--- |
-| `id` | text (PK) | Generado por el cliente |
-| `patient` | text | Jorge / Teresa |
-| `nurse_name` | text | Nombre de la enfermera |
-| `ta_sys` | int4 | Sistólica (**Nullable**) |
-| `ta_dia` | int4 | Diastólica (**Nullable**) |
-| `fc` | int4 | Frecuencia Cardíaca |
-| `fr` | int4 | Frecuencia Respiratoria |
-| `spo2` | int4 | Saturación |
-| `timestamp` | int8 | Fecha en ms |
+### SQL de Creación
+```sql
+-- 1. Signos Vitales
+CREATE TABLE IF NOT EXISTS vital_records (
+    id UUID PRIMARY KEY,
+    patient TEXT NOT NULL,
+    nurse_name TEXT NOT NULL,
+    ta_sys INTEGER,
+    ta_dia INTEGER,
+    fc INTEGER NOT NULL,
+    fr INTEGER NOT NULL,
+    spo2 INTEGER NOT NULL,
+    timestamp BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-### 2. `medicine_records`
-| Columna | Tipo | Notas |
-| :--- | :--- | :--- |
-| `id` | text (PK) | Generado por el cliente |
-| `patient` | text | Jorge / Teresa |
-| `nurse_name` | text | Nombre de la enfermera |
-| `medicine_name`| text | Nombre del medicamento |
-| `dose` | text | Dosis administrada |
-| `timestamp` | int8 | Fecha en ms |
+-- 2. Administración de Medicamentos
+CREATE TABLE IF NOT EXISTS medicine_records (
+    id UUID PRIMARY KEY,
+    patient TEXT NOT NULL,
+    nurse_name TEXT NOT NULL,
+    medicine_name TEXT NOT NULL,
+    dose TEXT NOT NULL,
+    timestamp BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-> [!IMPORTANT]
-> Los campos `ta_sys` y `ta_dia` deben configurarse como **"Allow Nullable"** en Supabase para permitir registros sin presión arterial.
+-- 3. Bitácora / Informes de Enfermería
+CREATE TABLE IF NOT EXISTS nurse_reports (
+    id UUID PRIMARY KEY,
+    patient TEXT NOT NULL,
+    nurse_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    observations JSONB, -- Estructura: {bowelMovement: boolean, sleepQuality: string, mood: string, appetite: string}
+    timestamp BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
 
-## 💻 Desarrollo Local
+### 🔐 Seguridad (RLS)
+Para evitar los avisos de "RLS Policy Always True" y mantener la seguridad:
+1. Habilita RLS en todas las tablas.
+2. Usa políticas que requieran el rol `anon` (proporcionado por tu API Key) en lugar de un simple `true`.
 
-1.  **Instalar dependencias:**
-    ```bash
-    npm install
-    ```
+```sql
+ALTER TABLE vital_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE medicine_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nurse_reports ENABLE ROW LEVEL SECURITY;
 
-2.  **Ejecutar en modo desarrollo:**
-    ```bash
-    npm run dev
-    ```
+-- Ejemplo de política segura para inserción
+CREATE POLICY "Insert Anon" ON nurse_reports 
+FOR INSERT WITH CHECK (auth.role() = 'anon');
 
-3.  **Configurar credenciales:**
-    Las credenciales actuales están hardcodeadas en `services/db.ts` para pruebas rápidas, pero se recomienda moverlas a un archivo `.env` en producción.
+-- Ejemplo de política segura para lectura
+CREATE POLICY "Select Anon" ON nurse_reports 
+FOR SELECT USING (auth.role() = 'anon');
+```
 
-## 📝 Notas de Implementación
-
--   La aplicación prioriza la disponibilidad: si falla la red, el dato queda en el teléfono.
--   Se implementaron validaciones médicas básicas para evitar errores de dedo (ej: saturación > 100%).
--   El diseño es "Mobile First", optimizado para pantallas táctiles de celulares.
+## 📋 Análisis de Bitácora (Fuente para IA)
+Basado en los reportes manuales (cuadernos de enfermería), la IA debe considerar:
+*   **Estado de Ánimo**: "Tranquilo", "Estable", "Intranquila", "Enojada".
+*   **Alimentación**: "Adecuada", "Poca cantidad".
+*   **Eliminación**: "Micción espontánea", "Deposición sí/no".
+*   **Hitos Horarios**: Eventos específicos (ej: "Desde las 17:30 intranquila").
+*   **Intervenciones**: "Colocación de parche de lidocaína".
 
 ---
 *Desarrollado con ❤️ para el cuidado de los padres.*
